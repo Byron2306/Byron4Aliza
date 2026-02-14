@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>signal</title>
+<style>
+  :root{
+    --bg0:#070812;
+    --bg1:#0b1030;
+    --g:#00ff66;        /* matrix green */
+    --c:#38f6ff;        /* cyan */
+    --m:#ff4fd8;        /* magenta */
+    --ink:rgba(240,245,255,.92);
+    --glass:rgba(8,10,22,.62);
+    --glass2:rgba(8,10,22,.22);
+    --sh:rgba(0,0,0,.82);
+  }
+  html,body{
+    height:100%;margin:0;overflow:hidden;
+    background:radial-gradient(1200px 900px at 50% 25%, var(--bg1), var(--bg0));
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  /* vignette + synthwave tint + subtle matrix green */
+  .v{
+    position:fixed;inset:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,.32) 55%, rgba(0,0,0,.88) 100%),
+      linear-gradient(90deg, rgba(255,79,216,.07), rgba(56,246,255,.07)),
+      radial-gradient(900px 700px at 50% 40%, rgba(0,255,102,.06), rgba(0,0,0,0) 65%);
+    mix-blend-mode:multiply;
+  }
+
+  /* scanline (green/cyan) */
+  .scan{
+    position:fixed;left:0;right:0;height:2px;top:-2px;pointer-events:none;
+    background:linear-gradient(90deg, rgba(0,255,102,.0), rgba(0,255,102,.22), rgba(56,246,255,.22), rgba(0,255,102,.0));
+    box-shadow:0 0 22px rgba(0,255,102,.18);
+    animation:scan 5.3s linear infinite;opacity:.55;
+  }
+  @keyframes scan{0%{transform:translateY(0);opacity:0}10%{opacity:.55}90%{opacity:.55}100%{transform:translateY(110vh);opacity:0}}
+
+  /* center */
+  .msg{position:fixed;inset:0;display:grid;place-items:center;z-index:6;text-align:center}
+  .card{
+    width:min(680px,92vw);
+    padding:22px 22px 18px;border-radius:18px;
+    background:linear-gradient(180deg,var(--glass),var(--glass2));
+    border:1px solid rgba(0,255,102,.18);
+    box-shadow:0 26px 90px var(--sh);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    transform:translateZ(0);
+  }
+  .t{
+    margin:0;
+    font-size:clamp(20px,3.6vw,56px);
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--g);
+    text-shadow:
+      0 0 14px rgba(0,255,102,.28),
+      0 0 26px rgba(56,246,255,.16),
+      0 0 34px rgba(255,79,216,.12);
+    line-height:1.15;
+  }
+  .s{
+    margin:12px 0 0;
+    font-size:clamp(12px,1.6vw,15px);
+    letter-spacing:.10em;
+    color:rgba(240,245,255,.82);
+    min-height:1.4em;
+    text-shadow:0 0 14px rgba(56,246,255,.10);
+  }
+
+  /* unlock UI */
+  .ui{margin-top:14px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  input{
+    width:min(390px,84vw);
+    padding:10px 12px;border-radius:12px;
+    border:1px solid rgba(56,246,255,.18);
+    background:rgba(0,0,0,.22);
+    color:rgba(240,245,255,.92);
+    letter-spacing:.08em;
+    outline:none;
+  }
+  button{
+    cursor:pointer;
+    padding:10px 12px;border-radius:12px;
+    border:1px solid rgba(255,79,216,.22);
+    background:rgba(0,0,0,.22);
+    color:rgba(240,245,255,.92);
+    font-weight:900;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
+  button:hover{background:rgba(0,0,0,.40)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+
+  /* sound control */
+  .sound{
+    position:fixed;right:14px;bottom:14px;z-index:7;
+    display:flex;gap:10px;align-items:center;
+    padding:10px 12px;border-radius:12px;
+    background:linear-gradient(180deg,rgba(8,10,22,.78),rgba(8,10,22,.28));
+    border:1px solid rgba(56,246,255,.18);
+    box-shadow:0 14px 50px rgba(0,0,0,.55);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    user-select:none;
+  }
+  .state{color:rgba(240,245,255,.78);font-size:12px;letter-spacing:.12em;white-space:nowrap}
+
+  /* BOOM effects */
+  .fx{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0}
+  .flash{
+    background:radial-gradient(900px 700px at 50% 45%,
+      rgba(0,255,102,.20),
+      rgba(56,246,255,.22),
+      rgba(255,79,216,.18),
+      rgba(0,0,0,0) 70%);
+  }
+  .shake{animation:shake 420ms linear both}
+  @keyframes shake{
+    0%{transform:translate(0,0)}
+    15%{transform:translate(-8px,6px)}
+    30%{transform:translate(9px,-6px)}
+    45%{transform:translate(-7px,-4px)}
+    60%{transform:translate(7px,5px)}
+    75%{transform:translate(-5px,2px)}
+    100%{transform:translate(0,0)}
+  }
+  .pop{animation:pop 900ms cubic-bezier(.2,.9,.2,1) both}
+  @keyframes pop{
+    0%{transform:scale(.86);filter:brightness(.85)}
+    45%{transform:scale(1.08);filter:brightness(1.35)}
+    100%{transform:scale(1);filter:brightness(1.06)}
+  }
+  .aww{animation:pulse 1.35s ease-in-out infinite}
+  @keyframes pulse{
+    0%,100%{transform:scale(1);filter:brightness(1)}
+    50%{transform:scale(1.03);filter:brightness(1.16)}
+  }
+  .boomLayer{position:fixed;inset:0;pointer-events:none;z-index:10}
+  .heart{
+    position:absolute;will-change:transform,opacity;
+    filter:drop-shadow(0 0 10px rgba(255,79,216,.18));
+  }
+</style>
+</head>
+
+<body>
+<canvas id="rain"></canvas>
+<canvas id="fall"></canvas>
+<div class="scan"></div>
+<div class="v"></div>
+
+<div class="fx flash" id="flash"></div>
+<div class="boomLayer" id="boom"></div>
+
+<div class="msg">
+  <div class="card" id="card">
+    <h1 class="t" id="title">ACCESS LOCKED</h1>
+    <p class="s" id="sub">enter passphrase to decrypt…</p>
+    <div class="ui" id="ui">
+      <input id="pw" type="password" placeholder="passphrase…" autocomplete="off" />
+      <button id="go">UNLOCK</button>
+    </div>
+    <p class="s" id="hint" style="opacity:.75;margin-top:10px">hint: it’s literally the line 😌</p>
+  </div>
+</div>
+
+<div class="sound">
+  <button id="snd">▶ SOUND</button>
+  <div class="state" id="snds">OFF</div>
+</div>
+
+<script>
+/* =========================
+   CONFIG
+   ========================= */
+const PASS = "She is the one!";
+const SALT_HEX = "d07a2c1ef7b4c9a311e0f2a6c0d0a44b";
+const ITER = 520000;  // slow guesses
+const MAX = 7;
+
+/* =========================
+   Helpers
+   ========================= */
+const $ = id => document.getElementById(id);
+const title=$("title"), sub=$("sub"), ui=$("ui"), card=$("card"), hint=$("hint");
+const pw=$("pw"), go=$("go");
+const flash=$("flash"), boom=$("boom");
+
+const hexToBytes = h => {
+  const out=new Uint8Array(h.length/2);
+  for(let i=0;i<out.length;i++) out[i]=parseInt(h.substr(i*2,2),16);
+  return out;
+};
+const bytesToHex = b => [...b].map(x=>x.toString(16).padStart(2,"0")).join("");
+
+async function pbkdf2Hex(pass){
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({name:"PBKDF2", hash:"SHA-256", salt: hexToBytes(SALT_HEX), iterations: ITER}, km, 256);
+  return bytesToHex(new Uint8Array(bits));
+}
+
+let TARGET="";
+(async()=>{ TARGET = await pbkdf2Hex(PASS); })();
+
+let tries=0, cooldownUntil=0;
+
+/* =========================
+   Matrix-ish rain (green + cyan/magenta accents)
+   ========================= */
+(() => {
+  const c=$("rain"), x=c.getContext("2d",{alpha:false});
+  const chars="アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let W,H,cols,drops,fs,dpr;
+
+  function rs(){
+    dpr=Math.max(1,Math.floor(devicePixelRatio||1));
+    W=innerWidth|0; H=innerHeight|0;
+    c.width=W*dpr; c.height=H*dpr; c.style.width=W+"px"; c.style.height=H+"px";
+    x.setTransform(dpr,0,0,dpr,0,0);
+    fs=Math.max(12,Math.min(20,Math.floor(W/70)));
+    cols=Math.floor(W/fs);
+    drops=new Array(cols).fill(0).map(()=>Math.floor(Math.random()*H/fs));
+  }
+  function dr(){
+    x.fillStyle="rgba(7,8,18,0.12)";
+    x.fillRect(0,0,W,H);
+    x.font=`${fs}px ui-monospace,Menlo,Consolas,monospace`;
+
+    for(let i=0;i<cols;i++){
+      const X=i*fs, Y=drops[i]*fs;
+      const ch=chars[(Math.random()*chars.length)|0];
+
+      // mostly green, sometimes cyan/magenta highlights
+      const r = Math.random();
+      let col = "rgba(0,255,102,0.90)";
+      if (r > 0.92) col = "rgba(56,246,255,0.88)";
+      if (r > 0.975) col = "rgba(255,79,216,0.82)";
+      x.fillStyle = col;
+      x.fillText(ch,X,Y);
+
+      x.fillStyle="rgba(0,255,102,0.12)";
+      x.fillText(chars[(Math.random()*chars.length)|0],X,Y-fs);
+
+      if(Y>H && Math.random()>0.979) drops[i]=0; else drops[i]+=1;
+    }
+    requestAnimationFrame(dr);
+  }
+  rs(); addEventListener("resize",rs); requestAnimationFrame(dr);
+})();
+
+/* =========================
+   Falling layer: mostly spoons, rare hearts
+   ========================= */
+(() => {
+  const c=$("fall"), x=c.getContext("2d",{alpha:true});
+  let W,H,dpr;
+  const items=[];
+  const glyphs=["🥄","🥄","🥄","🥄","🥄","🥄","💜"]; // 1 heart in 7
+
+  function rs(){
+    dpr=Math.max(1,Math.floor(devicePixelRatio||1));
+    W=innerWidth|0; H=innerHeight|0;
+    c.width=W*dpr; c.height=H*dpr; c.style.width=W+"px"; c.style.height=H+"px";
+    x.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function spawn(){
+    const g=glyphs[(Math.random()*glyphs.length)|0];
+    items.push({
+      g, x0:Math.random()*W, y:-20,
+      vy:55+Math.random()*120, vx:-14+Math.random()*28,
+      a:0.18+Math.random()*0.22, s:14+Math.random()*18, r:-0.9+Math.random()*1.8
+    });
+  }
+  let last=performance.now();
+  function tick(t){
+    const dt=Math.min(0.05,(t-last)/1000); last=t;
+    x.clearRect(0,0,W,H);
+
+    // low spawn rate
+    if(Math.random()<0.07) spawn();
+    if(Math.random()<0.035) spawn();
+
+    x.textBaseline="middle"; x.textAlign="center";
+    for(let i=items.length-1;i>=0;i--){
+      const it=items[i];
+      it.y+=it.vy*dt; it.x0+=it.vx*dt;
+      const wob=Math.sin(t/240+i)*0.7;
+
+      x.save();
+      x.globalAlpha=it.a;
+      x.font=`bold ${it.s}px ui-monospace, Segoe UI Emoji, Apple Color Emoji, sans-serif`;
+      x.translate(it.x0+wob,it.y);
+      x.rotate(it.r*0.15);
+      x.shadowColor="rgba(255,79,216,0.10)";
+      x.shadowBlur=10;
+      x.fillText(it.g,0,0);
+      x.restore();
+
+      if(it.y>H+40) items.splice(i,1);
+    }
+    requestAnimationFrame(tick);
+  }
+  rs(); addEventListener("resize",rs); requestAnimationFrame(tick);
+})();
+
+/* =========================
+   Voice (male-ish + glitch)
+   ========================= */
+let voiceCache=[];
+function loadVoices(){ voiceCache = speechSynthesis.getVoices() || []; }
+loadVoices(); speechSynthesis.onvoiceschanged = loadVoices;
+
+function pickVoice(){
+  const v = voiceCache.filter(v =>
+    /en/i.test(v.lang) &&
+    /(david|mark|guy|male|daniel|george|ryan|microsoft|google)/i.test(v.name)
+  );
+  return v[0] || voiceCache.find(v => /en/i.test(v.lang)) || voiceCache[0] || null;
+}
+function speakGlitch(line){
+  try{
+    const v = pickVoice();
+    const u = new SpeechSynthesisUtterance(line.replace(/\./g," … "));
+    if(v) u.voice = v;
+    u.volume = 1.0;
+    u.rate   = 0.88;
+    u.pitch  = 0.55;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* =========================
+   BOOM + reveal
+   ========================= */
+function heartBurst(){
+  boom.innerHTML="";
+  const n=28;
+  for(let i=0;i<n;i++){
+    const e=document.createElement("div");
+    e.className="heart";
+    e.textContent = (Math.random()<0.70 ? "💜" : (Math.random()<0.5 ? "💘" : "💖"));
+    const x = innerWidth*0.5 + (Math.random()*260-130);
+    const y = innerHeight*0.5 + (Math.random()*120-60);
+    const dx = (Math.random()*2-1)*340;
+    const dy = - (240 + Math.random()*460);
+    const s = 18 + Math.random()*28;
+    e.style.left=x+"px"; e.style.top=y+"px"; e.style.fontSize=s+"px";
+    boom.appendChild(e);
+
+    const t0=performance.now();
+    const dur=1200+Math.random()*900;
+    const spin=(Math.random()*2-1)*2.0;
+
+    (function anim(t){
+      const p=Math.min(1,(t-t0)/dur);
+      const ease=1-Math.pow(1-p,3);
+      e.style.opacity=String(1-p);
+      e.style.transform=`translate(${dx*ease}px,${dy*ease}px) rotate(${spin*ease}rad) scale(${1+0.22*Math.sin(p*Math.PI)})`;
+      if(p<1) requestAnimationFrame(anim);
+    })(t0);
+  }
+}
+function bigBoom(){
+  flash.style.opacity="1";
+  flash.classList.add("shake");
+  setTimeout(()=>flash.style.opacity="0", 260);
+  setTimeout(()=>flash.classList.remove("shake"), 480);
+  card.classList.add("pop");
+  setTimeout(()=>card.classList.remove("pop"), 1000);
+}
+
+function awwReveal(){
+  title.classList.add("aww");
+  title.textContent="Byr0N 4 Al15A";
+  sub.textContent="I luv Y0u Tr1N. (yes, it’s corny. yes, it’s real.)";
+  ui.style.display="none";
+  hint.textContent="DECRYPTION COMPLETE • LINK ESTABLISHED";
+  bigBoom();
+  heartBurst();
+  speakGlitch("I … love … you, Trin.");
+}
+
+/* =========================
+   Wrong attempt roasts (corny tech)
+   ========================= */
+const ROASTS = [
+  "Nope. That passphrase has the confidence of an expired token.",
+  "Access denied. Your packets are flirting badly.",
+  "Auth failed. Please stop brute-forcing my feelings.",
+  "Wrong key. Your entropy is adorable though.",
+  "401 Unauthorized — try destiny, not desperation.",
+  "Handshake refused. That input is giving ‘undefined behavior’.",
+  "Invalid credentials. Please update your romance driver.",
+  "Denied. But nice attempt, little hacker."
+];
+
+/* =========================
+   Unlock attempt
+   ========================= */
+async function unlock(){
+  const now=Date.now();
+  if(now<cooldownUntil){
+    sub.textContent = `cooldown… ${Math.ceil((cooldownUntil-now)/1000)}s (rate limit, sweetheart)`;
+    return;
+  }
+  const input=(pw.value||"").trim();
+  if(!input) return;
+
+  sub.textContent="decrypting… stand by…";
+  const got = await pbkdf2Hex(input);
+
+  const ok = got.length===TARGET.length &&
+    [...got].reduce((a,ch,i)=> a | (ch.charCodeAt(0) ^ TARGET.charCodeAt(i)), 0) === 0;
+
+  if(ok){ awwReveal(); return; }
+
+  tries++;
+  pw.value=""; pw.focus();
+
+  if(tries>=MAX){
+    sub.textContent="LOCKED. Maximum romance throughput reached.";
+    go.disabled=true; pw.disabled=true;
+    speakGlitch("LOCK … OUT … initiated.");
+    return;
+  }
+
+  const back = Math.min(30000, 900*Math.pow(2,tries));
+  cooldownUntil = Date.now() + back;
+  sub.textContent = ROASTS[(Math.random()*ROASTS.length)|0] + `  (attempt ${tries}/${MAX})`;
+}
+go.addEventListener("click", unlock);
+pw.addEventListener("keydown", e => { if(e.key==="Enter") unlock(); });
+
+/* ==========================================================
+   SOUND: Dark cyber techno, deep bass, 3-beat arp feel
+   - Original pattern (not a copy)
+   - Bass-forward: sub + mid bass, reduced bright lead
+   - Kick + ducking (pump)
+   - 3-step bass arp (triplet-like) over 4/4
+   ========================================================== */
+const sndBtn=$("snd"), snds=$("snds");
+let ac=null, run=false, timer=null;
+
+// note helpers
+const A4=440, m2hz=m=>A4*Math.pow(2,(m-69)/12);
+
+function startAudio(){
+  ac = new (window.AudioContext||window.webkitAudioContext)();
+
+  // Master chain: saturation + LP + compressor (club glue)
+  const master = ac.createGain(); master.gain.value = 0.32;
+
+  const sh = ac.createWaveShaper();
+  sh.curve = (() => {
+    const n=4096, c=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const x=(i*2)/(n-1)-1;
+      c[i]=Math.tanh(4.6*x); // gritty
+    }
+    return c;
+  })();
+  sh.oversample="4x";
+
+  const lp = ac.createBiquadFilter();
+  lp.type="lowpass";
+  lp.frequency.value = 5200; // keep it darker
+  lp.Q.value = 0.7;
+
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value=-24;
+  comp.knee.value=14;
+  comp.ratio.value=7;
+  comp.attack.value=0.003;
+  comp.release.value=0.16;
+
+  master.connect(sh); sh.connect(lp); lp.connect(comp); comp.connect(ac.destination);
+
+  // Ducking bus (sidechain-ish)
+  const duck = ac.createGain(); duck.gain.value = 1.0;
+  duck.connect(master);
+
+  // SUB + MID bass (the star)
+  const subOsc = ac.createOscillator(); subOsc.type="sine";
+  const subG = ac.createGain(); subG.gain.value = 0.0;
+  subOsc.connect(subG); subG.connect(duck); subOsc.start();
+
+  const midOsc = ac.createOscillator(); midOsc.type="square";
+  const midG = ac.createGain(); midG.gain.value = 0.0;
+  midOsc.connect(midG); midG.connect(duck); midOsc.start();
+
+  // A very quiet dark “air” layer (not bright lead)
+  const pad = ac.createOscillator(); pad.type="triangle";
+  const padF = ac.createBiquadFilter(); padF.type="lowpass"; padF.frequency.value=900;
+  const padG = ac.createGain(); padG.gain.value = 0.0;
+  pad.connect(padF); padF.connect(padG); padG.connect(master); pad.start();
+
+  // Hats (darker)
+  function hat(str=0.045){
+    const len=Math.floor(ac.sampleRate*0.010);
+    const buf=ac.createBuffer(1,len,ac.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++){
+      // darker noise by squaring envelope
+      d[i]=(Math.random()*2-1)*Math.pow(1-i/len, 2.6);
+    }
+    const src=ac.createBufferSource(); src.buffer=buf;
+    const g=ac.createGain(); g.gain.value=str;
+    src.connect(g); g.connect(master);
+    src.start();
+  }
+
+  // Kick (deep) + duck envelope
+  function kick(){
+    const o=ac.createOscillator(); o.type="sine";
+    const g=ac.createGain(); o.connect(g); g.connect(master);
+    const now=ac.currentTime;
+
+    // deep pitch drop
+    o.frequency.setValueAtTime(120, now);
+    o.frequency.exponentialRampToValueAtTime(44, now + 0.10);
+
+    g.gain.setValueAtTime(0.22, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+    // heavier pump
+    duck.gain.cancelScheduledValues(now);
+    duck.gain.setValueAtTime(0.36, now);
+    duck.gain.exponentialRampToValueAtTime(1.0, now + 0.14);
+
+    o.start(now);
+    o.stop(now + 0.15);
+  }
+
+  // Tempo + grid
+  // We’ll use a 12-step sub-grid (triplet feel) over a 4/4 bar.
+  // 12 steps per bar => 3-step arp naturally grooves.
+  const bpm = 138;
+  const secPerBeat = 60 / bpm;          // quarter note
+  const barSec = secPerBeat * 4;        // 4/4
+  const stepSec = barSec / 12;          // triplet-ish grid
+  const stepMs = Math.floor(stepSec * 1000);
+
+  // Bass arp (3-step pattern repeating) — ORIGINAL
+  // Use a dark minor-ish center; keep it low.
+  // 0 = rest; values are MIDI notes.
+  const root = 38; // D2-ish region depending; deep
+  const arp3 = [
+    root, root+7, root+10,  // 1st triplet: root, 5th, m7
+    root, root+5, root+10,  // 2nd triplet: root, 4th, m7
+    root, root+7, root+12,  // 3rd triplet: root, 5th, octave
+    root, root+5, root+10   // 4th triplet
+  ];
+
+  // Kick on 4/4 (steps 0, 6, 9) gives that club push on this grid
+  const kickSteps = new Set([0, 6, 9]);
+
+  // Hats: sparse/dark (not too bright)
+  const hatSteps = new Set([3, 5, 7, 11]);
+
+  let step = 0;
+
+  function tick(){
+    const now = ac.currentTime;
+
+    // Kick
+    if (kickSteps.has(step)) kick();
+
+    // Hats
+    if (hatSteps.has(step)) hat(0.042 + Math.random()*0.02);
+
+    // Bass note
+    const n = arp3[step % arp3.length];
+    const hz = m2hz(n);
+
+    subOsc.frequency.setTargetAtTime(hz, now, 0.010);
+    midOsc.frequency.setTargetAtTime(hz, now, 0.012);
+
+    // pumping gains (bass-forward)
+    subG.gain.setTargetAtTime(0.30, now, 0.020);
+    midG.gain.setTargetAtTime(0.09, now, 0.030);
+
+    // subtle dark pad, only on some steps
+    const padOn = (step % 12 === 0 || step % 12 === 6);
+    if (padOn) {
+      pad.frequency.setTargetAtTime(m2hz(root+24), now, 0.04); // quiet octave pad
+      padG.gain.setTargetAtTime(0.020, now, 0.08);
+    } else {
+      padG.gain.setTargetAtTime(0.0, now, 0.10);
+    }
+
+    // slight filter motion for movement (still dark)
+    lp.frequency.setTargetAtTime(4200 + Math.sin(step/6)*1100, now, 0.05);
+
+    step++;
+  }
+
+  timer = setInterval(tick, stepMs);
+  tick();
+}
+
+function stopAudio(){
+  if(timer) clearInterval(timer);
+  timer=null;
+  if(ac) ac.close();
+  ac=null;
+}
+
+sndBtn.addEventListener("click", ()=>{
+  run = !run;
+  sndBtn.textContent = run ? "⏸ SOUND" : "▶ SOUND";
+  snds.textContent = run ? "ON" : "OFF";
+  if(run) startAudio(); else stopAudio();
+});
+</script>
+</body>
+</html>
